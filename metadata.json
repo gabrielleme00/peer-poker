@@ -1,0 +1,5 @@
+{
+  "name": "Peer Poker",
+  "description": "A real-time, serverless Planning Poker app using Vue 3 and PeerJS.",
+  "requestFramePermissions": []
+}
