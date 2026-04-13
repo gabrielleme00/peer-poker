@@ -46,8 +46,8 @@ const { t } = useI18n();
         </button>
       </div>
       <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 text-white shadow-lg shadow-blue-600/20">
-          <Users class="w-8 h-8" />
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 text-white shadow-lg shadow-blue-600/20">
+          <img src="/favicon.png" alt="Logo">
         </div>
         <h1 class="text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">{{ t('welcome.title') }}</h1>
         <p class="text-neutral-500 dark:text-neutral-400 mt-2">{{ t('welcome.subtitle') }}</p>
