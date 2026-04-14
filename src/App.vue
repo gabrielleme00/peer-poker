@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Peer, type DataConnection } from 'peerjs';
-import type { User, Task, RoomState, PeerMessage } from './types';
+import { Peer, DataConnection } from 'peerjs';
+import { User, Task, RoomState, PeerMessage, TimerType, CardSystem, TaskStatus } from './types';
 
 // Components
 import LandingPage from './components/LandingPage.vue';
@@ -70,9 +70,9 @@ const newName = ref('');
 const newTitle = ref('');
 const tempSettings = ref({
   autoStart: true,
-  timerType: 'NONE' as 'NONE' | 'TRACKTIME' | 'COUNTDOWN',
+  timerType: TimerType.NONE,
   countdownSeconds: 60,
-  cardSystem: '1-10' as '1-10' | 'FIBONACCI' | 'DOUBLING' | 'CUSTOM',
+  cardSystem: CardSystem.ONE_TO_TEN,
   customCards: ''
 });
 
@@ -88,9 +88,9 @@ const state = reactive<RoomState>({
   isRevealed: false,
   settings: {
     autoStart: true,
-    timerType: 'NONE',
+    timerType: TimerType.NONE,
     countdownSeconds: 60,
-    cardSystem: '1-10',
+    cardSystem: CardSystem.ONE_TO_TEN,
     customCards: ''
   },
   votingStartTime: null,
@@ -111,11 +111,11 @@ const votingProgress = computed(() => {
 
 const voteOptions = computed(() => {
   switch (state.settings.cardSystem) {
-    case 'FIBONACCI':
+    case CardSystem.FIBONACCI:
       return ['0', '1', '2', '3', '5', '8', '13', '21', '34', '55', '89', '?'];
-    case 'DOUBLING':
+    case CardSystem.DOUBLING:
       return ['1', '2', '4', '8', '16', '32', '64', '?'];
-    case 'CUSTOM':
+    case CardSystem.CUSTOM:
       return state.settings.customCards.split(',').map(s => s.trim()).filter(s => s).concat(['?']);
     default:
       return ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '?'];
@@ -126,7 +126,7 @@ const timerDisplay = ref('');
 let timerInterval: any = null;
 
 const updateTimer = () => {
-  if (!state.isVotingStarted || !state.votingStartTime || state.settings.timerType === 'NONE') {
+  if (!state.isVotingStarted || !state.votingStartTime || state.settings.timerType === TimerType.NONE) {
     timerDisplay.value = '';
     return;
   }
@@ -134,11 +134,11 @@ const updateTimer = () => {
   const now = Date.now();
   const elapsed = Math.floor((now - state.votingStartTime) / 1000);
 
-  if (state.settings.timerType === 'TRACKTIME') {
+  if (state.settings.timerType === TimerType.TRACKTIME) {
     const mins = Math.floor(elapsed / 60);
     const secs = elapsed % 60;
     timerDisplay.value = `${mins}:${secs.toString().padStart(2, '0')}`;
-  } else if (state.settings.timerType === 'COUNTDOWN') {
+  } else if (state.settings.timerType === TimerType.COUNTDOWN) {
     const remaining = state.settings.countdownSeconds - elapsed;
     if (remaining <= 0) {
       timerDisplay.value = '0:00';
@@ -161,13 +161,6 @@ const broadcast = (message: PeerMessage) => {
       conn.send(message);
     }
   });
-};
-
-const updateState = (newState: Partial<RoomState>) => {
-  Object.assign(state, newState);
-  if (isManager.value) {
-    broadcast({ type: 'STATE_UPDATE', state });
-  }
 };
 
 const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
@@ -404,7 +397,7 @@ const saveTask = () => {
         title,
         description: '',
         finalScore: null,
-        status: 'pending'
+        status: TaskStatus.PENDING
       };
       state.tasks.push(newTask);
     });
@@ -422,7 +415,7 @@ const saveTask = () => {
         title: editingTask.value.title,
         description: editingTask.value.description || '',
         finalScore: null,
-        status: 'pending'
+        status: TaskStatus.PENDING
       };
       state.tasks.push(newTask);
     }
@@ -508,7 +501,7 @@ const setFinalScore = (score: string) => {
     const task = state.tasks.find(t => t.id === state.activeTaskId);
     if (task) {
       task.finalScore = score;
-      task.status = 'completed';
+      task.status = TaskStatus.COMPLETED;
       broadcast({ type: 'STATE_UPDATE', state });
     }
   }
@@ -605,7 +598,7 @@ const downloadResults = () => {
     task.title,
     task.description.replace(/"/g, '""'),
     task.finalScore || 'N/A',
-    task.status === 'completed' ? t('room.completed') : t('room.pending')
+    task.status === TaskStatus.COMPLETED ? t('room.completed') : t('room.pending')
   ]);
 
   const csvContent = [

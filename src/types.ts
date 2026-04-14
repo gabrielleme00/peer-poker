@@ -6,19 +6,38 @@ export interface User {
   vote: string | null;
 }
 
+export enum TaskStatus {
+  PENDING = 'pending',
+  VOTING = 'voting',
+  COMPLETED = 'completed'
+}
+
 export interface Task {
   id: string;
   title: string;
   description: string;
   finalScore: string | null;
-  status: 'pending' | 'voting' | 'completed';
+  status: TaskStatus;
+}
+
+export enum TimerType {
+  NONE = 'NONE',
+  TRACKTIME = 'TRACKTIME',
+  COUNTDOWN = 'COUNTDOWN'
+}
+
+export enum CardSystem {
+  ONE_TO_TEN = '1-10',
+  FIBONACCI = 'FIBONACCI',
+  DOUBLING = 'DOUBLING',
+  CUSTOM = 'CUSTOM'
 }
 
 export interface RoomSettings {
   autoStart: boolean;
-  timerType: 'NONE' | 'TRACKTIME' | 'COUNTDOWN';
+  timerType: TimerType;
   countdownSeconds: number;
-  cardSystem: '1-10' | 'FIBONACCI' | 'DOUBLING' | 'CUSTOM';
+  cardSystem: CardSystem;
   customCards: string;
 }
 
