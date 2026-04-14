@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, UserPlus, ShieldCheck, Trash2, Plus, PackagePlus, Pencil, FileText, CheckCircle2, RotateCcw, LogOut } from 'lucide-vue-next';
+import { Users, UserPlus, ShieldCheck, Trash2, Plus, PackagePlus, Pencil, FileText, CheckCircle2, RotateCcw, LogOut, X } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { RoomState } from '../types';
 
@@ -19,12 +19,20 @@ const emit = defineEmits<{
   (e: 'openResults'): void;
   (e: 'resetVoting'): void;
   (e: 'leaveRoom'): void;
+  (e: 'closeMobileMenu'): void;
 }>();
 
 const { t } = useI18n();
 </script>
 
 <template>
+  <!-- Backdrop overlay (mobile only) -->
+  <div
+    v-if="isMobileMenuOpen"
+    class="fixed inset-0 z-30 bg-black/40 lg:hidden"
+    @click="emit('closeMobileMenu')"
+  />
+
   <aside 
     class="fixed inset-y-0 left-0 w-72 md:w-80 bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 z-40 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 flex flex-col"
     :class="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'"
@@ -37,13 +45,21 @@ const { t } = useI18n();
           {{ t('room.participants') }}
           <span class="ml-2 px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-800 rounded text-[10px]">{{ state.users.length }}</span>
         </h3>
-        <button 
-          @click="emit('copyRoomId')"
-          class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-          :title="t('room.invite')"
-        >
-          <UserPlus class="w-4 h-4" />
-        </button>
+        <div class="flex items-center space-x-1">
+          <button 
+            @click="emit('copyRoomId')"
+            class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+            :title="t('room.invite')"
+          >
+            <UserPlus class="w-4 h-4" />
+          </button>
+          <button
+            @click="emit('closeMobileMenu')"
+            class="lg:hidden p-1.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
       </div>
       <div class="space-y-1 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
         <div 

@@ -2,9 +2,6 @@
 import { ref, reactive, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Peer, type DataConnection } from 'peerjs';
-import { 
-  Users
-} from 'lucide-vue-next';
 import type { User, Task, RoomState, PeerMessage } from './types';
 
 // Components
@@ -17,7 +14,7 @@ import SettingsModal from './components/SettingsModal.vue';
 import ResultsModal from './components/ResultsModal.vue';
 
 // State
-const name = ref('');
+const name = ref(sessionStorage.getItem('userName') ?? '');
 const isManager = ref(false);
 const roomIdInput = ref('');
 const roomTitleInput = ref('');
@@ -63,6 +60,11 @@ watch(isDarkMode, (val) => {
     document.documentElement.classList.remove('dark');
   }
 }, { immediate: true });
+
+watch(name, (val) => {
+  if (val) sessionStorage.setItem('userName', val);
+});
+
 const { t, locale } = useI18n();
 const newName = ref('');
 const newTitle = ref('');
@@ -271,6 +273,7 @@ const createRoom = () => {
   
   peer.value.on('open', (id) => {
     myId.value = id;
+    window.history.replaceState({}, '', `?room=${id}`);
     state.title = roomTitleInput.value;
     state.users = [{
       id,
@@ -352,6 +355,7 @@ const leaveRoom = () => {
   state.tasks = [];
   connections.value = [];
   myId.value = '';
+  window.history.replaceState({}, '', window.location.pathname);
 };
 
 const castVote = (vote: string) => {
@@ -530,6 +534,7 @@ const updateMyName = () => {
   if (user) {
     user.name = newName.value.trim();
     name.value = user.name;
+    sessionStorage.setItem('userName', user.name);
     if (isManager.value) {
       broadcast({ type: 'STATE_UPDATE', state });
     } else {
@@ -596,11 +601,11 @@ const downloadResults = () => {
     t('room.csvHeaders.score'),
     t('room.csvHeaders.status')
   ];
-  const rows = state.tasks.map(t => [
-    t.title,
-    t.description.replace(/"/g, '""'),
-    t.finalScore || 'N/A',
-    t.status === 'completed' ? t('room.completed') : t('room.pending')
+  const rows = state.tasks.map(task => [
+    task.title,
+    task.description.replace(/"/g, '""'),
+    task.finalScore || 'N/A',
+    task.status === 'completed' ? t('room.completed') : t('room.pending')
   ]);
 
   const csvContent = [
@@ -621,6 +626,15 @@ const downloadResults = () => {
 
 onMounted(() => {
   timerInterval = setInterval(updateTimer, 1000);
+
+  const params = new URLSearchParams(window.location.search);
+  const roomFromUrl = params.get('room');
+  if (roomFromUrl) {
+    roomIdInput.value = roomFromUrl;
+    if (!name.value) name.value = 'Anonymous';
+    isManager.value = false;
+    joinRoom();
+  }
 });
 
 onUnmounted(() => {
@@ -690,6 +704,7 @@ onUnmounted(() => {
           @openResults="isResultsModalOpen = true"
           @resetVoting="resetVoting"
           @leaveRoom="leaveRoom"
+          @closeMobileMenu="isMobileMenuOpen = false"
         />
 
         <VotingArea 
