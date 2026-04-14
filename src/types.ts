@@ -65,4 +65,5 @@ export type PeerMessage =
   | { type: 'SET_ACTIVE_TASK'; taskId: string | null }
   | { type: 'UPDATE_NAME'; userId: string; name: string }
   | { type: 'UPDATE_ROOM_TITLE'; title: string }
-  | { type: 'START_VOTING' };
+  | { type: 'START_VOTING' }
+  | { type: 'DISCONNECT' };

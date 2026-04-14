@@ -170,6 +170,8 @@ const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
       break;
     case 'JOIN':
       if (isManager.value && conn) {
+        // Remove stale entry in case this is a reconnect with the same peer ID
+        state.users = state.users.filter(u => u.id !== conn.peer);
         const newUser: User = {
           id: conn.peer,
           name: msg.name,
@@ -232,8 +234,16 @@ const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
       break;
     case 'KICK':
       if (myId.value === msg.userId) {
+        localStorage.removeItem(`peerId_${roomIdInput.value}`);
         leaveRoom();
         error.value = 'You have been removed from the room.';
+      }
+      break;
+    case 'DISCONNECT':
+      if (isManager.value && conn) {
+        state.users = state.users.filter(u => u.id !== conn.peer);
+        connections.value = connections.value.filter(c => c.peer !== conn.peer);
+        broadcast({ type: 'STATE_UPDATE', state });
       }
       break;
     case 'UPDATE_NAME':
@@ -299,7 +309,7 @@ const createRoom = () => {
   });
 };
 
-const joinRoom = () => {
+const joinRoom = (useFreshId = false) => {
   if (!name.value || !roomIdInput.value) {
     error.value = 'Name and Room ID are required';
     return;
@@ -307,10 +317,12 @@ const joinRoom = () => {
   isConnecting.value = true;
   error.value = '';
 
-  peer.value = new Peer();
+  const storedPeerId = !useFreshId ? localStorage.getItem(`peerId_${roomIdInput.value}`) : null;
+  peer.value = storedPeerId ? new Peer(storedPeerId) : new Peer();
 
   peer.value.on('open', (id) => {
     myId.value = id;
+    localStorage.setItem(`peerId_${roomIdInput.value}`, id);
     const conn = peer.value!.connect(roomIdInput.value);
     
     conn.on('open', () => {
@@ -334,12 +346,22 @@ const joinRoom = () => {
   });
 
   peer.value.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      // Stored peer ID is still reserved on the server; retry with a fresh ID
+      localStorage.removeItem(`peerId_${roomIdInput.value}`);
+      peer.value?.destroy();
+      joinRoom(true);
+      return;
+    }
     error.value = `Peer error: ${err.type}`;
     isConnecting.value = false;
   });
 };
 
-const leaveRoom = () => {
+const leaveRoom = (intentional = false) => {
+  if (intentional) {
+    localStorage.removeItem(`peerId_${roomIdInput.value}`);
+  }
   if (peer.value) {
     peer.value.destroy();
   }
@@ -620,13 +642,17 @@ const downloadResults = () => {
 onMounted(() => {
   timerInterval = setInterval(updateTimer, 1000);
 
+  window.addEventListener('beforeunload', () => {
+    if (!isManager.value && connections.value[0]?.open) {
+      connections.value[0].send({ type: 'DISCONNECT' });
+    }
+  });
+
   const params = new URLSearchParams(window.location.search);
   const roomFromUrl = params.get('room');
   if (roomFromUrl) {
     roomIdInput.value = roomFromUrl;
-    if (!name.value) name.value = 'Anonymous';
     isManager.value = false;
-    joinRoom();
   }
 });
 
@@ -696,7 +722,7 @@ onUnmounted(() => {
           @removeTask="removeTask"
           @openResults="isResultsModalOpen = true"
           @resetVoting="resetVoting"
-          @leaveRoom="leaveRoom"
+          @leaveRoom="leaveRoom(true)"
           @closeMobileMenu="isMobileMenuOpen = false"
         />
 
