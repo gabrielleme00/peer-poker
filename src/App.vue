@@ -234,7 +234,6 @@ const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
       break;
     case 'KICK':
       if (myId.value === msg.userId) {
-        localStorage.removeItem(`peerId_${roomIdInput.value}`);
         leaveRoom();
         error.value = 'You have been removed from the room.';
       }
@@ -283,10 +282,8 @@ const createPeer = async (id?: string) => {
     secure: true,
     port: 443,
     config: {
-      iceServers: [
+      iceServers: USE_ICE_SERVERS ? iceServers : [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
-        ...iceServers
       ]
     }
   };
@@ -338,7 +335,7 @@ const createRoom = async () => {
   });
 };
 
-const joinRoom = async (useFreshId = false) => {
+const joinRoom = async () => {
   if (!name.value || !roomIdInput.value) {
     error.value = 'Name and Room ID are required';
     return;
@@ -346,12 +343,10 @@ const joinRoom = async (useFreshId = false) => {
   isConnecting.value = true;
   error.value = '';
 
-  const storedPeerId = !useFreshId ? localStorage.getItem(`peerId_${roomIdInput.value}`) : null;
-  peer.value = storedPeerId ? await createPeer(storedPeerId) : await createPeer();
+  peer.value = await createPeer();
 
   peer.value.on('open', (id) => {
     myId.value = id;
-    localStorage.setItem(`peerId_${roomIdInput.value}`, id);
     const conn = peer.value!.connect(roomIdInput.value);
     
     conn.on('open', () => {
@@ -374,12 +369,11 @@ const joinRoom = async (useFreshId = false) => {
     });
   });
 
-  peer.value.on('error', (err) => {
+  peer.value.on('error', async (err) => {
     if (err.type === 'unavailable-id') {
       // Stored peer ID is still reserved on the server; retry with a fresh ID
-      localStorage.removeItem(`peerId_${roomIdInput.value}`);
       peer.value?.destroy();
-      joinRoom(true);
+      await joinRoom();
       return;
     }
     error.value = `Peer error: ${err.type}`;
@@ -388,9 +382,6 @@ const joinRoom = async (useFreshId = false) => {
 };
 
 const leaveRoom = (intentional = false) => {
-  if (intentional) {
-    localStorage.removeItem(`peerId_${roomIdInput.value}`);
-  }
   if (peer.value) {
     peer.value.destroy();
   }
