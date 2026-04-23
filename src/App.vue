@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Peer, DataConnection } from 'peerjs';
+import { Peer, DataConnection, PeerJSOption } from 'peerjs';
 import { User, Task, RoomState, PeerMessage, TimerType, CardSystem, TaskStatus } from './types';
 
 // Components
@@ -264,7 +264,36 @@ const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
   }
 };
 
-const createRoom = () => {
+const USE_ICE_SERVERS = true;
+
+const getIceServers = async (): Promise<RTCIceServer[]> => {
+  try {
+    const res = await fetch('https://peer-poker.gabriel-oliveira-leme.workers.dev/');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+};
+
+const createPeer = async (id?: string) => {
+  const iceServers = USE_ICE_SERVERS ? await getIceServers() : [];
+  const config: PeerJSOption = {
+    host: '0.peerjs.com',
+    secure: true,
+    port: 443,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
+        ...iceServers
+      ]
+    }
+  };
+  return id ? new Peer(id, config) : new Peer(config);
+};
+
+const createRoom = async () => {
   if (!name.value || !roomTitleInput.value) {
     error.value = 'Name and Room Title are required';
     return;
@@ -272,7 +301,7 @@ const createRoom = () => {
   isConnecting.value = true;
   error.value = '';
 
-  peer.value = new Peer();
+  peer.value = await createPeer();
   
   peer.value.on('open', (id) => {
     myId.value = id;
@@ -309,7 +338,7 @@ const createRoom = () => {
   });
 };
 
-const joinRoom = (useFreshId = false) => {
+const joinRoom = async (useFreshId = false) => {
   if (!name.value || !roomIdInput.value) {
     error.value = 'Name and Room ID are required';
     return;
@@ -318,7 +347,7 @@ const joinRoom = (useFreshId = false) => {
   error.value = '';
 
   const storedPeerId = !useFreshId ? localStorage.getItem(`peerId_${roomIdInput.value}`) : null;
-  peer.value = storedPeerId ? new Peer(storedPeerId) : new Peer();
+  peer.value = storedPeerId ? await createPeer(storedPeerId) : await createPeer();
 
   peer.value.on('open', (id) => {
     myId.value = id;
