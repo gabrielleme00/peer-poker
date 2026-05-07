@@ -156,6 +156,7 @@ const updateTimer = () => {
 // PeerJS Logic
 
 const broadcast = (message: PeerMessage) => {
+  console.log('[PeerPoker] Broadcasting message:', message.type, 'to', connections.value.filter(c => c.open).length, 'peers');
   connections.value.forEach(conn => {
     if (conn.open) {
       conn.send(message);
@@ -266,26 +267,40 @@ const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
 const USE_ICE_SERVERS = true;
 
 const getIceServers = async (): Promise<RTCIceServer[]> => {
+  console.log('[PeerPoker] Fetching ICE servers...');
   try {
     const res = await fetch('https://peer-poker.gabriel-oliveira-leme.workers.dev/');
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
+    if (!res.ok) {
+      console.warn('[PeerPoker] ICE server fetch failed, status:', res.status);
+      return [];
+    }
+    const servers = await res.json();
+    console.log('[PeerPoker] ICE servers received:', servers);
+    return servers;
+  } catch (e) {
+    console.warn('[PeerPoker] ICE server fetch error:', e);
     return [];
   }
 };
 
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
 const createPeer = async (id?: string) => {
-  const iceServers = USE_ICE_SERVERS ? await getIceServers() : [];
+  console.log('[PeerPoker] Creating peer', id ? `with id: ${id}` : '(no id)');
+  const fetchedServers = USE_ICE_SERVERS ? await getIceServers() : [];
+  // Always include fallback STUN servers so candidates are gathered even if the worker fails
+  const iceServers = fetchedServers.length > 0
+    ? [...fetchedServers, ...FALLBACK_ICE_SERVERS]
+    : FALLBACK_ICE_SERVERS;
+  console.log('[PeerPoker] Using ICE servers:', JSON.stringify(iceServers));
   const config: PeerJSOption = {
     host: '0.peerjs.com',
     secure: true,
     port: 443,
-    config: {
-      iceServers: USE_ICE_SERVERS ? iceServers : [
-        { urls: 'stun:stun.l.google.com:19302' },
-      ]
-    }
+    config: { iceServers }
   };
   return id ? new Peer(id, config) : new Peer(config);
 };
@@ -301,6 +316,7 @@ const createRoom = async () => {
   peer.value = await createPeer();
   
   peer.value.on('open', (id) => {
+    console.log('[PeerPoker] Room peer open, id:', id);
     myId.value = id;
     window.history.replaceState({}, '', `?room=${id}`);
     state.title = roomTitleInput.value;
@@ -316,13 +332,18 @@ const createRoom = async () => {
   });
 
   peer.value.on('connection', (conn) => {
+    console.log('[PeerPoker] Incoming connection from peer:', conn.peer);
     connections.value.push(conn);
-    conn.on('data', (data) => handleMessage(data as PeerMessage, conn));
+    conn.on('data', (data) => {
+      console.log('[PeerPoker] Data received from', conn.peer, ':', data);
+      handleMessage(data as PeerMessage, conn);
+    });
     conn.on('open', () => {
-      // Send initial state
+      console.log('[PeerPoker] Connection open with peer:', conn.peer, '- sending initial state');
       conn.send({ type: 'STATE_UPDATE', state });
     });
     conn.on('close', () => {
+      console.log('[PeerPoker] Connection closed with peer:', conn.peer);
       state.users = state.users.filter(u => u.id !== conn.peer);
       connections.value = connections.value.filter(c => c.peer !== conn.peer);
       broadcast({ type: 'STATE_UPDATE', state });
@@ -330,6 +351,7 @@ const createRoom = async () => {
   });
 
   peer.value.on('error', (err) => {
+    console.error('[PeerPoker] Room peer error:', err.type, err);
     error.value = `Peer error: ${err.type}`;
     isConnecting.value = false;
   });
@@ -346,32 +368,83 @@ const joinRoom = async () => {
   peer.value = await createPeer();
 
   peer.value.on('open', (id) => {
+    console.log('[PeerPoker] Join peer open, id:', id, '- connecting to room:', roomIdInput.value);
     myId.value = id;
     const conn = peer.value!.connect(roomIdInput.value);
-    
+    console.log('[PeerPoker] DataConnection object created:', conn);
+
+    // Attach RTCPeerConnection listeners on the next microtask - by then PeerJS
+    // has synchronously created the RTCPeerConnection and set the local offer,
+    // but ICE gathering / trickle events haven't fired yet.
+    Promise.resolve().then(() => {
+      const pc = (conn as any).peerConnection as RTCPeerConnection | undefined;
+      if (!pc) {
+        console.warn('[PeerPoker] RTCPeerConnection not available on next microtask');
+        return;
+      }
+      console.log('[PeerPoker] RTCPeerConnection found, ICE state:', pc.iceConnectionState, '| signaling:', pc.signalingState);
+      console.log('[PeerPoker] RTCPeerConnection config:', JSON.stringify(pc.getConfiguration()));
+      pc.addEventListener('iceconnectionstatechange', () => {
+        console.log('[PeerPoker] ICE connection state →', pc.iceConnectionState);
+      });
+      pc.addEventListener('icegatheringstatechange', () => {
+        console.log('[PeerPoker] ICE gathering state →', pc.iceGatheringState);
+      });
+      pc.addEventListener('signalingstatechange', () => {
+        console.log('[PeerPoker] Signaling state →', pc.signalingState);
+      });
+      pc.addEventListener('icecandidate', (e) => {
+        console.log('[PeerPoker] Local ICE candidate:', e.candidate ? e.candidate.candidate : '(null - gathering complete)');
+      });
+    });
+
+    // Detect a stalled connection - if ICE never completes the data channel won't open.
+    // The most common cause is the host running an older version of the app with no ICE
+    // servers configured, so they generate no candidates for us to connect to.
+    const connectionTimeout = setTimeout(() => {
+      if (!isJoined.value) {
+        const pc = (conn as any).peerConnection as RTCPeerConnection | undefined;
+        console.error(
+          '[PeerPoker] Connection timed out after 20s.',
+          pc ? `ICE state: ${pc.iceConnectionState} | gathering: ${pc.iceGatheringState}` : 'No RTCPeerConnection'
+        );
+        error.value = 'Could not connect - the host may be running an outdated version of the app. Ask them to refresh and recreate the room.';
+        isConnecting.value = false;
+        conn.close();
+      }
+    }, 20000);
+
     conn.on('open', () => {
+      clearTimeout(connectionTimeout);
+      console.log('[PeerPoker] Connection to room open, sending JOIN');
       connections.value = [conn];
       conn.send({ type: 'JOIN', name: name.value, isManager: false });
       isJoined.value = true;
       isConnecting.value = false;
     });
 
-    conn.on('data', (data) => handleMessage(data as PeerMessage));
+    conn.on('data', (data) => {
+      console.log('[PeerPoker] Data received from host:', data);
+      handleMessage(data as PeerMessage);
+    });
     
     conn.on('close', () => {
+      console.log('[PeerPoker] Connection to room closed');
       leaveRoom();
       error.value = 'Connection to room lost.';
     });
 
     conn.on('error', (err) => {
+      console.error('[PeerPoker] Connection error:', err);
       error.value = 'Failed to connect to room.';
       isConnecting.value = false;
     });
   });
 
   peer.value.on('error', async (err) => {
+    console.error('[PeerPoker] Join peer error:', err.type, err);
     if (err.type === 'unavailable-id') {
-      // Stored peer ID is still reserved on the server; retry with a fresh ID
+      console.log('[PeerPoker] Unavailable ID, retrying with fresh peer...');
       peer.value?.destroy();
       await joinRoom();
       return;
