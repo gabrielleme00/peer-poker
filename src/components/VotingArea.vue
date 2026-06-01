@@ -138,7 +138,7 @@ const { t } = useI18n();
                       :key="score"
                       @click="emit('setFinalScore', score)"
                       class="px-3 py-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-blue-500 dark:hover:border-blue-500 text-neutral-700 dark:text-neutral-300 text-xs font-bold rounded-lg transition-all"
-                      :class="activeTask?.finalScore === score ? 'bg-blue-600 border-blue-600 text-white' : ''"
+                      :class="activeTask?.finalScore === score ? 'bg-blue-600 border-blue-600' : ''"
                     >
                       {{ score }}
                     </button>

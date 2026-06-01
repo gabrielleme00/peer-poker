@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import {
   RoomState,
   User,
-  Task,
   TaskStatus,
   TimerType,
   CardSystem,
@@ -135,12 +134,15 @@ const handleVote = (socketId: string, msg: Extract<ClientMessage, { type: 'VOTE'
   broadcastToRoom(room, { type: 'STATE_UPDATE', state: room.state });
 };
 
+const resolveVotingStartTime = (timerType: TimerType): number | null =>
+  timerType !== TimerType.NONE ? Date.now() : null;
+
 const handleStartVoting = (socketId: string) => {
   const room = getManagerRoom(socketId);
   if (!room || !room.state.activeTaskId) return;
 
   room.state.isVotingStarted = true;
-  room.state.votingStartTime = Date.now();
+  room.state.votingStartTime = resolveVotingStartTime(room.state.settings.timerType);
   broadcastToRoom(room, { type: 'STATE_UPDATE', state: room.state });
 };
 
@@ -162,7 +164,7 @@ const handleResetVoting = (socketId: string) => {
 
   if (room.state.activeTaskId && room.state.settings.autoStart) {
     room.state.isVotingStarted = true;
-    room.state.votingStartTime = Date.now();
+    room.state.votingStartTime = resolveVotingStartTime(room.state.settings.timerType);
   } else {
     room.state.isVotingStarted = false;
     room.state.votingStartTime = null;
@@ -181,7 +183,7 @@ const handleSetActiveTask = (socketId: string, msg: Extract<ClientMessage, { typ
 
   if (msg.taskId && room.state.settings.autoStart) {
     room.state.isVotingStarted = true;
-    room.state.votingStartTime = Date.now();
+    room.state.votingStartTime = resolveVotingStartTime(room.state.settings.timerType);
   } else {
     room.state.isVotingStarted = false;
     room.state.votingStartTime = null;
