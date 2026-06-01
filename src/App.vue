@@ -154,7 +154,7 @@ const updateTimer = () => {
 
 // WebSocket logic
 
-const WS_URL = (import.meta.env.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8080';
+const WS_URL = (import.meta.env.VITE_WS_URL as string | undefined) || 'ws://localhost:8080';
 
 const send = (msg: ClientMessage) => {
   ws.value?.send(JSON.stringify(msg));
