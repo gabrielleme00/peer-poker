@@ -1,6 +1,6 @@
 # Peer Poker
 
-P2P poker planning in Vue 3 + PeerJS.
+P2P poker planning in Vue 3 + WebSockets.
 
 ## Run Locally
 
