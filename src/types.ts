@@ -52,18 +52,26 @@ export interface RoomState {
   isVotingStarted: boolean;
 }
 
-export type PeerMessage = 
-  | { type: 'STATE_UPDATE'; state: RoomState }
-  | { type: 'JOIN'; name: string; isManager: boolean }
+export type ClientMessage =
+  | { type: 'CREATE_ROOM'; name: string; title: string }
+  | { type: 'JOIN'; name: string; roomId: string }
   | { type: 'VOTE'; taskId: string; vote: string }
-  | { type: 'KICK'; userId: string }
-  | { type: 'ADD_TASK'; task: Task }
-  | { type: 'REMOVE_TASK'; taskId: string }
-  | { type: 'UPDATE_TASK'; task: Task }
+  | { type: 'START_VOTING' }
   | { type: 'REVEAL' }
   | { type: 'RESET_VOTING' }
   | { type: 'SET_ACTIVE_TASK'; taskId: string | null }
-  | { type: 'UPDATE_NAME'; userId: string; name: string }
+  | { type: 'ADD_TASK'; task: Task }
+  | { type: 'REMOVE_TASK'; taskId: string }
+  | { type: 'UPDATE_TASK'; task: Task }
+  | { type: 'SET_FINAL_SCORE'; taskId: string; score: string }
+  | { type: 'UPDATE_SETTINGS'; settings: RoomSettings }
+  | { type: 'UPDATE_NAME'; name: string }
   | { type: 'UPDATE_ROOM_TITLE'; title: string }
-  | { type: 'START_VOTING' }
-  | { type: 'DISCONNECT' };
+  | { type: 'KICK'; userId: string };
+
+export type ServerMessage =
+  | { type: 'ROOM_CREATED'; roomId: string; userId: string }
+  | { type: 'JOINED'; userId: string; state: RoomState }
+  | { type: 'STATE_UPDATE'; state: RoomState }
+  | { type: 'KICKED' }
+  | { type: 'ERROR'; message: string };

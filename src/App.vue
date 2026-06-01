@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Peer, DataConnection, PeerJSOption } from 'peerjs';
-import { User, Task, RoomState, PeerMessage, TimerType, CardSystem, TaskStatus } from './types';
+import { Task, RoomState, ClientMessage, ServerMessage, TimerType, CardSystem, TaskStatus } from './types';
 
 // Components
 import LandingPage from './components/LandingPage.vue';
@@ -76,8 +75,8 @@ const tempSettings = ref({
   customCards: ''
 });
 
-const peer = ref<Peer | null>(null);
-const connections = ref<DataConnection[]>([]);
+const ws = ref<WebSocket | null>(null);
+const roomId = ref('');
 const myId = ref('');
 
 const state = reactive<RoomState>({
@@ -153,159 +152,55 @@ const updateTimer = () => {
   }
 };
 
-// PeerJS Logic
+// WebSocket logic
 
-const broadcast = (message: PeerMessage) => {
-  console.log('[PeerPoker] Broadcasting message:', message.type, 'to', connections.value.filter(c => c.open).length, 'peers');
-  connections.value.forEach(conn => {
-    if (conn.open) {
-      conn.send(message);
-    }
-  });
+const WS_URL = (import.meta.env.VITE_WS_URL as string | undefined) ?? 'ws://localhost:8080';
+
+const send = (msg: ClientMessage) => {
+  ws.value?.send(JSON.stringify(msg));
 };
 
-const handleMessage = (msg: PeerMessage, conn?: DataConnection) => {
+const handleServerMessage = (event: MessageEvent) => {
+  const msg = JSON.parse(event.data as string) as ServerMessage;
   switch (msg.type) {
+    case 'ROOM_CREATED':
+      roomId.value = msg.roomId;
+      myId.value = msg.userId;
+      isManager.value = true;
+      window.history.replaceState({}, '', `?room=${msg.roomId}`);
+      isJoined.value = true;
+      isConnecting.value = false;
+      break;
+    case 'JOINED':
+      myId.value = msg.userId;
+      isManager.value = false;
+      Object.assign(state, msg.state);
+      isJoined.value = true;
+      isConnecting.value = false;
+      break;
     case 'STATE_UPDATE':
       Object.assign(state, msg.state);
       break;
-    case 'JOIN':
-      if (isManager.value && conn) {
-        // Remove stale entry in case this is a reconnect with the same peer ID
-        state.users = state.users.filter(u => u.id !== conn.peer);
-        const newUser: User = {
-          id: conn.peer,
-          name: msg.name,
-          isManager: msg.isManager,
-          hasVoted: false,
-          vote: null
-        };
-        state.users.push(newUser);
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
+    case 'KICKED':
+      leaveRoom();
+      error.value = 'You have been removed from the room.';
       break;
-    case 'VOTE':
-      if (isManager.value) {
-        const user = state.users.find(u => u.id === conn?.peer);
-        if (user && state.activeTaskId === msg.taskId) {
-          user.hasVoted = true;
-          user.vote = msg.vote;
-          broadcast({ type: 'STATE_UPDATE', state });
-        }
-      }
-      break;
-    case 'ADD_TASK':
-      if (isManager.value) {
-        state.tasks.push(msg.task);
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
-      break;
-    case 'REMOVE_TASK':
-      if (isManager.value) {
-        state.tasks = state.tasks.filter(t => t.id !== msg.taskId);
-        if (state.activeTaskId === msg.taskId) state.activeTaskId = null;
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
-      break;
-    case 'SET_ACTIVE_TASK':
-      if (isManager.value) {
-        setActiveTask(msg.taskId);
-      }
-      break;
-    case 'START_VOTING':
-      if (isManager.value) {
-        startVoting();
-      }
-      break;
-    case 'REVEAL':
-      if (isManager.value) {
-        state.isRevealed = true;
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
-      break;
-    case 'RESET_VOTING':
-      if (isManager.value) {
-        state.isRevealed = false;
-        state.users.forEach(u => {
-          u.hasVoted = false;
-          u.vote = null;
-        });
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
-      break;
-    case 'KICK':
-      if (myId.value === msg.userId) {
-        leaveRoom();
-        error.value = 'You have been removed from the room.';
-      }
-      break;
-    case 'DISCONNECT':
-      if (isManager.value && conn) {
-        state.users = state.users.filter(u => u.id !== conn.peer);
-        connections.value = connections.value.filter(c => c.peer !== conn.peer);
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
-      break;
-    case 'UPDATE_NAME':
-      const userToUpdate = state.users.find(u => u.id === msg.userId);
-      if (userToUpdate) {
-        userToUpdate.name = msg.name;
-        if (isManager.value) {
-          broadcast({ type: 'STATE_UPDATE', state });
-        }
-      }
-      break;
-    case 'UPDATE_ROOM_TITLE':
-      state.title = msg.title;
-      if (isManager.value) {
-        broadcast({ type: 'STATE_UPDATE', state });
-      }
+    case 'ERROR':
+      error.value = msg.message;
+      isConnecting.value = false;
       break;
   }
 };
 
-const USE_ICE_SERVERS = true;
-
-const getIceServers = async (): Promise<RTCIceServer[]> => {
-  console.log('[PeerPoker] Fetching ICE servers...');
-  try {
-    const res = await fetch('https://peer-poker.gabriel-oliveira-leme.workers.dev/');
-    if (!res.ok) {
-      console.warn('[PeerPoker] ICE server fetch failed, status:', res.status);
-      return [];
-    }
-    const servers = await res.json();
-    console.log('[PeerPoker] ICE servers received:', servers);
-    return servers;
-  } catch (e) {
-    console.warn('[PeerPoker] ICE server fetch error:', e);
-    return [];
+const handleWsDisconnect = () => {
+  if (isJoined.value) {
+    leaveRoom();
+    error.value = 'Connection to server lost.';
   }
+  isConnecting.value = false;
 };
 
-const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];
-
-const createPeer = async (id?: string) => {
-  console.log('[PeerPoker] Creating peer', id ? `with id: ${id}` : '(no id)');
-  const fetchedServers = USE_ICE_SERVERS ? await getIceServers() : [];
-  // Always include fallback STUN servers so candidates are gathered even if the worker fails
-  const iceServers = fetchedServers.length > 0
-    ? [...fetchedServers, ...FALLBACK_ICE_SERVERS]
-    : FALLBACK_ICE_SERVERS;
-  console.log('[PeerPoker] Using ICE servers:', JSON.stringify(iceServers));
-  const config: PeerJSOption = {
-    host: '0.peerjs.com',
-    secure: true,
-    port: 443,
-    config: { iceServers }
-  };
-  return id ? new Peer(id, config) : new Peer(config);
-};
-
-const createRoom = async () => {
+const createRoom = () => {
   if (!name.value || !roomTitleInput.value) {
     error.value = 'Name and Room Title are required';
     return;
@@ -313,51 +208,19 @@ const createRoom = async () => {
   isConnecting.value = true;
   error.value = '';
 
-  peer.value = await createPeer();
-  
-  peer.value.on('open', (id) => {
-    console.log('[PeerPoker] Room peer open, id:', id);
-    myId.value = id;
-    window.history.replaceState({}, '', `?room=${id}`);
-    state.title = roomTitleInput.value;
-    state.users = [{
-      id,
-      name: name.value,
-      isManager: true,
-      hasVoted: false,
-      vote: null
-    }];
-    isJoined.value = true;
+  ws.value = new WebSocket(WS_URL);
+  ws.value.onopen = () => {
+    send({ type: 'CREATE_ROOM', name: name.value, title: roomTitleInput.value });
+  };
+  ws.value.onmessage = handleServerMessage;
+  ws.value.onclose = handleWsDisconnect;
+  ws.value.onerror = () => {
+    error.value = 'Could not connect to server.';
     isConnecting.value = false;
-  });
-
-  peer.value.on('connection', (conn) => {
-    console.log('[PeerPoker] Incoming connection from peer:', conn.peer);
-    connections.value.push(conn);
-    conn.on('data', (data) => {
-      console.log('[PeerPoker] Data received from', conn.peer, ':', data);
-      handleMessage(data as PeerMessage, conn);
-    });
-    conn.on('open', () => {
-      console.log('[PeerPoker] Connection open with peer:', conn.peer, '- sending initial state');
-      conn.send({ type: 'STATE_UPDATE', state });
-    });
-    conn.on('close', () => {
-      console.log('[PeerPoker] Connection closed with peer:', conn.peer);
-      state.users = state.users.filter(u => u.id !== conn.peer);
-      connections.value = connections.value.filter(c => c.peer !== conn.peer);
-      broadcast({ type: 'STATE_UPDATE', state });
-    });
-  });
-
-  peer.value.on('error', (err) => {
-    console.error('[PeerPoker] Room peer error:', err.type, err);
-    error.value = `Peer error: ${err.type}`;
-    isConnecting.value = false;
-  });
+  };
 };
 
-const joinRoom = async () => {
+const joinRoom = () => {
   if (!name.value || !roomIdInput.value) {
     error.value = 'Name and Room ID are required';
     return;
@@ -365,123 +228,39 @@ const joinRoom = async () => {
   isConnecting.value = true;
   error.value = '';
 
-  peer.value = await createPeer();
-
-  peer.value.on('open', (id) => {
-    console.log('[PeerPoker] Join peer open, id:', id, '- connecting to room:', roomIdInput.value);
-    myId.value = id;
-    const conn = peer.value!.connect(roomIdInput.value);
-    console.log('[PeerPoker] DataConnection object created:', conn);
-
-    // Attach RTCPeerConnection listeners on the next microtask - by then PeerJS
-    // has synchronously created the RTCPeerConnection and set the local offer,
-    // but ICE gathering / trickle events haven't fired yet.
-    Promise.resolve().then(() => {
-      const pc = (conn as any).peerConnection as RTCPeerConnection | undefined;
-      if (!pc) {
-        console.warn('[PeerPoker] RTCPeerConnection not available on next microtask');
-        return;
-      }
-      console.log('[PeerPoker] RTCPeerConnection found, ICE state:', pc.iceConnectionState, '| signaling:', pc.signalingState);
-      console.log('[PeerPoker] RTCPeerConnection config:', JSON.stringify(pc.getConfiguration()));
-      pc.addEventListener('iceconnectionstatechange', () => {
-        console.log('[PeerPoker] ICE connection state →', pc.iceConnectionState);
-      });
-      pc.addEventListener('icegatheringstatechange', () => {
-        console.log('[PeerPoker] ICE gathering state →', pc.iceGatheringState);
-      });
-      pc.addEventListener('signalingstatechange', () => {
-        console.log('[PeerPoker] Signaling state →', pc.signalingState);
-      });
-      pc.addEventListener('icecandidate', (e) => {
-        console.log('[PeerPoker] Local ICE candidate:', e.candidate ? e.candidate.candidate : '(null - gathering complete)');
-      });
-    });
-
-    // Detect a stalled connection - if ICE never completes the data channel won't open.
-    // The most common cause is the host running an older version of the app with no ICE
-    // servers configured, so they generate no candidates for us to connect to.
-    const connectionTimeout = setTimeout(() => {
-      if (!isJoined.value) {
-        const pc = (conn as any).peerConnection as RTCPeerConnection | undefined;
-        console.error(
-          '[PeerPoker] Connection timed out after 20s.',
-          pc ? `ICE state: ${pc.iceConnectionState} | gathering: ${pc.iceGatheringState}` : 'No RTCPeerConnection'
-        );
-        error.value = 'Could not connect - the host may be running an outdated version of the app. Ask them to refresh and recreate the room.';
-        isConnecting.value = false;
-        conn.close();
-      }
-    }, 20000);
-
-    conn.on('open', () => {
-      clearTimeout(connectionTimeout);
-      console.log('[PeerPoker] Connection to room open, sending JOIN');
-      connections.value = [conn];
-      conn.send({ type: 'JOIN', name: name.value, isManager: false });
-      isJoined.value = true;
-      isConnecting.value = false;
-    });
-
-    conn.on('data', (data) => {
-      console.log('[PeerPoker] Data received from host:', data);
-      handleMessage(data as PeerMessage);
-    });
-    
-    conn.on('close', () => {
-      console.log('[PeerPoker] Connection to room closed');
-      leaveRoom();
-      error.value = 'Connection to room lost.';
-    });
-
-    conn.on('error', (err) => {
-      console.error('[PeerPoker] Connection error:', err);
-      error.value = 'Failed to connect to room.';
-      isConnecting.value = false;
-    });
-  });
-
-  peer.value.on('error', async (err) => {
-    console.error('[PeerPoker] Join peer error:', err.type, err);
-    if (err.type === 'unavailable-id') {
-      console.log('[PeerPoker] Unavailable ID, retrying with fresh peer...');
-      peer.value?.destroy();
-      await joinRoom();
-      return;
-    }
-    error.value = `Peer error: ${err.type}`;
+  ws.value = new WebSocket(WS_URL);
+  ws.value.onopen = () => {
+    send({ type: 'JOIN', name: name.value, roomId: roomIdInput.value });
+  };
+  ws.value.onmessage = handleServerMessage;
+  ws.value.onclose = handleWsDisconnect;
+  ws.value.onerror = () => {
+    error.value = 'Could not connect to server.';
     isConnecting.value = false;
-  });
+  };
 };
 
-const leaveRoom = (intentional = false) => {
-  if (peer.value) {
-    peer.value.destroy();
+const leaveRoom = (_intentional = false) => {
+  if (ws.value) {
+    ws.value.onclose = null; // prevent handleWsDisconnect loop
+    ws.value.close();
+    ws.value = null;
   }
   isJoined.value = false;
+  roomId.value = '';
+  myId.value = '';
   state.users = [];
   state.tasks = [];
-  connections.value = [];
-  myId.value = '';
+  state.activeTaskId = null;
+  state.isRevealed = false;
+  state.isVotingStarted = false;
+  state.votingStartTime = null;
   window.history.replaceState({}, '', window.location.pathname);
 };
 
 const castVote = (vote: string) => {
   if (!state.activeTaskId) return;
-  
-  if (isManager.value) {
-    const user = state.users.find(u => u.id === myId.value);
-    if (user) {
-      user.hasVoted = true;
-      user.vote = vote;
-      broadcast({ type: 'STATE_UPDATE', state });
-    }
-  } else {
-    const conn = connections.value[0];
-    if (conn) {
-      conn.send({ type: 'VOTE', taskId: state.activeTaskId, vote });
-    }
-  }
+  send({ type: 'VOTE', taskId: state.activeTaskId, vote });
 };
 
 const openTaskModal = (task?: Task, batch = false) => {
@@ -505,7 +284,7 @@ const saveTask = () => {
   if (isBatchMode.value) {
     const titles = batchTitles.value.split('\n').map(t => t.trim()).filter(t => t);
     if (titles.length === 0) return;
-    
+
     titles.forEach(title => {
       const newTask: Task = {
         id: Math.random().toString(36).substr(2, 9),
@@ -514,15 +293,15 @@ const saveTask = () => {
         finalScore: null,
         status: TaskStatus.PENDING
       };
-      state.tasks.push(newTask);
+      send({ type: 'ADD_TASK', task: newTask });
     });
   } else {
     if (!editingTask.value.title) return;
 
     if (isEditing.value) {
-      const index = state.tasks.findIndex(t => t.id === editingTask.value.id);
-      if (index !== -1) {
-        state.tasks[index] = { ...state.tasks[index], ...editingTask.value } as Task;
+      const existing = state.tasks.find(t => t.id === editingTask.value.id);
+      if (existing) {
+        send({ type: 'UPDATE_TASK', task: { ...existing, ...editingTask.value } as Task });
       }
     } else {
       const newTask: Task = {
@@ -532,104 +311,41 @@ const saveTask = () => {
         finalScore: null,
         status: TaskStatus.PENDING
       };
-      state.tasks.push(newTask);
+      send({ type: 'ADD_TASK', task: newTask });
     }
   }
 
-  broadcast({ type: 'STATE_UPDATE', state });
   isTaskModalOpen.value = false;
 };
 
 const removeTask = (id: string) => {
-  if (isManager.value) {
-    state.tasks = state.tasks.filter(t => t.id !== id);
-    if (state.activeTaskId === id) state.activeTaskId = null;
-    broadcast({ type: 'STATE_UPDATE', state });
-  }
+  send({ type: 'REMOVE_TASK', taskId: id });
 };
 
 const setActiveTask = (id: string | null) => {
-  if (isManager.value) {
-    isMobileMenuOpen.value = false;
-    state.activeTaskId = id;
-    state.isRevealed = false;
-    state.users.forEach(u => {
-      u.hasVoted = false;
-      u.vote = null;
-    });
-    
-    if (id && state.settings.autoStart) {
-      state.isVotingStarted = true;
-      state.votingStartTime = Date.now();
-    } else {
-      state.isVotingStarted = false;
-      state.votingStartTime = null;
-    }
-    
-    broadcast({ type: 'STATE_UPDATE', state });
-  }
+  isMobileMenuOpen.value = false;
+  send({ type: 'SET_ACTIVE_TASK', taskId: id });
 };
 
 const startVoting = () => {
-  if (isManager.value && state.activeTaskId) {
-    state.isVotingStarted = true;
-    state.votingStartTime = Date.now();
-    broadcast({ type: 'STATE_UPDATE', state });
-  } else if (!isManager.value) {
-    const conn = connections.value[0];
-    if (conn) {
-      conn.send({ type: 'START_VOTING' });
-    }
-  }
+  send({ type: 'START_VOTING' });
 };
 
 const revealVotes = () => {
-  if (isManager.value) {
-    state.isRevealed = true;
-    state.isVotingStarted = false;
-    broadcast({ type: 'STATE_UPDATE', state });
-  }
+  send({ type: 'REVEAL' });
 };
 
 const resetVoting = () => {
-  if (isManager.value) {
-    state.isRevealed = false;
-    state.users.forEach(u => {
-      u.hasVoted = false;
-      u.vote = null;
-    });
-    
-    if (state.activeTaskId && state.settings.autoStart) {
-      state.isVotingStarted = true;
-      state.votingStartTime = Date.now();
-    } else {
-      state.isVotingStarted = false;
-      state.votingStartTime = null;
-    }
-    
-    broadcast({ type: 'STATE_UPDATE', state });
-  }
+  send({ type: 'RESET_VOTING' });
 };
 
 const setFinalScore = (score: string) => {
-  if (isManager.value && state.activeTaskId) {
-    const task = state.tasks.find(t => t.id === state.activeTaskId);
-    if (task) {
-      task.finalScore = score;
-      task.status = TaskStatus.COMPLETED;
-      broadcast({ type: 'STATE_UPDATE', state });
-    }
-  }
+  if (!state.activeTaskId) return;
+  send({ type: 'SET_FINAL_SCORE', taskId: state.activeTaskId, score });
 };
 
 const kickUser = (userId: string) => {
-  if (isManager.value) {
-    broadcast({ type: 'KICK', userId });
-    state.users = state.users.filter(u => u.id !== userId);
-    const conn = connections.value.find(c => c.peer === userId);
-    if (conn) conn.close();
-    broadcast({ type: 'STATE_UPDATE', state });
-  }
+  send({ type: 'KICK', userId });
 };
 
 const updateMyName = () => {
@@ -637,32 +353,20 @@ const updateMyName = () => {
     isEditingName.value = false;
     return;
   }
-  
-  const user = state.users.find(u => u.id === myId.value);
-  if (user) {
-    user.name = newName.value.trim();
-    name.value = user.name;
-    sessionStorage.setItem('userName', user.name);
-    if (isManager.value) {
-      broadcast({ type: 'STATE_UPDATE', state });
-    } else {
-      const conn = connections.value[0];
-      if (conn) {
-        conn.send({ type: 'UPDATE_NAME', userId: myId.value, name: user.name });
-      }
-    }
-  }
+
+  name.value = newName.value.trim();
+  sessionStorage.setItem('userName', name.value);
+  send({ type: 'UPDATE_NAME', name: name.value });
   isEditingName.value = false;
 };
 
 const updateRoomTitle = () => {
-  if (!isManager.value || !newTitle.value.trim()) {
+  if (!newTitle.value.trim()) {
     isEditingTitle.value = false;
     return;
   }
-  
-  state.title = newTitle.value.trim();
-  broadcast({ type: 'STATE_UPDATE', state });
+
+  send({ type: 'UPDATE_ROOM_TITLE', title: newTitle.value.trim() });
   isEditingTitle.value = false;
 };
 
@@ -683,8 +387,7 @@ const openSettings = () => {
 };
 
 const saveSettings = () => {
-  state.settings = { ...tempSettings.value };
-  broadcast({ type: 'STATE_UPDATE', state });
+  send({ type: 'UPDATE_SETTINGS', settings: { ...tempSettings.value } });
   isSettingsModalOpen.value = false;
 };
 
@@ -697,7 +400,7 @@ const toggleDarkMode = () => {
 };
 
 const copyRoomId = () => {
-  navigator.clipboard.writeText(myId.value);
+  navigator.clipboard.writeText(roomId.value);
   copied.value = true;
   setTimeout(() => copied.value = false, 2000);
 };
@@ -734,12 +437,6 @@ const downloadResults = () => {
 
 onMounted(() => {
   timerInterval = setInterval(updateTimer, 1000);
-
-  window.addEventListener('beforeunload', () => {
-    if (!isManager.value && connections.value[0]?.open) {
-      connections.value[0].send({ type: 'DISCONNECT' });
-    }
-  });
 
   const params = new URLSearchParams(window.location.search);
   const roomFromUrl = params.get('room');
@@ -780,7 +477,7 @@ onUnmounted(() => {
       <RoomHeader 
         :state="state"
         :currentUser="currentUser"
-        :myId="myId"
+        :roomId="roomId"
         :isManager="isManager"
         :isMobileMenuOpen="isMobileMenuOpen"
         :isEditingTitle="isEditingTitle"
@@ -815,7 +512,7 @@ onUnmounted(() => {
           @removeTask="removeTask"
           @openResults="isResultsModalOpen = true"
           @resetVoting="resetVoting"
-          @leaveRoom="leaveRoom(true)"
+          @leaveRoom="leaveRoom()"
           @closeMobileMenu="isMobileMenuOpen = false"
         />
 

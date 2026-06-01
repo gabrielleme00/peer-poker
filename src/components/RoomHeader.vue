@@ -6,7 +6,7 @@ import type { RoomState, User } from '../types';
 defineProps<{
   state: RoomState;
   currentUser: User | undefined;
-  myId: string;
+  roomId: string;
   isManager: boolean;
   isMobileMenuOpen: boolean;
   isEditingTitle: boolean;
@@ -105,7 +105,7 @@ const vFocus = {
                 class="hidden lg:flex hover:text-blue-600 dark:hover:text-blue-400 transition-colors items-center group"
                 @click="emit('copyRoomId')"
               >
-                {{ t('room.id') }}: {{ myId.substring(0, 8) }}...
+                {{ t('room.id') }}: {{ roomId }}...
                 <component :is="copied ? Check : Copy" class="w-3 h-3 ml-1" />
               </button>
               <span v-if="timerDisplay" class="hidden lg:flex items-center text-blue-600 dark:text-blue-400 font-bold ml-2 animate-in fade-in">
@@ -153,7 +153,7 @@ const vFocus = {
         @click="emit('copyRoomId')"
         class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center"
       >
-        {{ t('room.id') }}: {{ myId.substring(0, 8) }}...
+        {{ t('room.id') }}: {{ roomId }}...
         <component :is="copied ? Check : Copy" class="w-3 h-3 ml-1" />
       </button>
       <span v-if="timerDisplay" class="flex items-center text-blue-600 dark:text-blue-400 font-bold animate-in fade-in">
