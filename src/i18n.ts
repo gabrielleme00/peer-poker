@@ -76,6 +76,8 @@ const messages = {
       voted: 'Voted',
       thinking: 'Thinking...',
       you: 'You',
+      finalScore: 'Final Score',
+      tapToDismiss: 'Click to dismiss',
     },
     settings: {
       autoStart: 'Auto-start voting',
@@ -174,6 +176,8 @@ const messages = {
       voted: 'Votou',
       thinking: 'Pensando...',
       you: 'Você',
+      finalScore: 'Pontuação Final',
+      tapToDismiss: 'Clique para fechar',
     },
     settings: {
       autoStart: 'Iniciar votação automaticamente',

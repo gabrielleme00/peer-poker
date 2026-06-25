@@ -167,11 +167,13 @@ const handleServerMessage = (event: MessageEvent) => {
       roomId.value = msg.roomId;
       myId.value = msg.userId;
       isManager.value = true;
+      Object.assign(state, msg.state);
       window.history.replaceState({}, '', `?room=${msg.roomId}`);
       isJoined.value = true;
       isConnecting.value = false;
       break;
     case 'JOINED':
+      roomId.value = roomIdInput.value;
       myId.value = msg.userId;
       isManager.value = false;
       Object.assign(state, msg.state);

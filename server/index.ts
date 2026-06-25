@@ -93,7 +93,7 @@ const handleCreateRoom = (socketId: string, ws: WebSocket, msg: Extract<ClientMe
   rooms.set(roomId, room);
   clientRooms.set(socketId, roomId);
 
-  send(ws, { type: 'ROOM_CREATED', roomId, userId });
+  send(ws, { type: 'ROOM_CREATED', roomId, userId, state });
 };
 
 const handleJoin = (socketId: string, ws: WebSocket, msg: Extract<ClientMessage, { type: 'JOIN' }>) => {

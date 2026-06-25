@@ -70,7 +70,7 @@ export type ClientMessage =
   | { type: 'KICK'; userId: string };
 
 export type ServerMessage =
-  | { type: 'ROOM_CREATED'; roomId: string; userId: string }
+  | { type: 'ROOM_CREATED'; roomId: string; userId: string; state: RoomState }
   | { type: 'JOINED'; userId: string; state: RoomState }
   | { type: 'STATE_UPDATE'; state: RoomState }
   | { type: 'KICKED' }
