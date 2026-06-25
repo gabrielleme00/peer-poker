@@ -1,6 +1,6 @@
-# Peer Poker
+# SyncPoker
 
-Poker Planning in Vue 3 + WebSockets.
+A minimalist, WebSocket-powered planning poker app for agile teams. Zero friction, instant sync.
 
 ## Run Locally
 

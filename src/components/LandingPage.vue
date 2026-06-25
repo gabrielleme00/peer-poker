@@ -30,7 +30,7 @@ const { t } = useI18n();
 <template>
   <div class="flex items-center justify-center min-h-screen p-6">
     <div class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-neutral-200 dark:border-neutral-800 p-8">
-      <div class="flex justify-end mb-4 space-x-4">
+      <div class="flex justify-end space-x-4">
         <button 
           @click="emit('toggleDarkMode')" 
           class="text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -45,12 +45,12 @@ const { t } = useI18n();
           {{ locale === 'en' ? 'PT' : 'EN' }}
         </button>
       </div>
-      <div class="text-center mb-8">
+      <div class="text-center mb-6" :style="{ marginTop: '-24px' }">
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 text-white shadow-lg shadow-blue-600/20">
           <img src="/favicon.png" alt="Logo">
         </div>
         <h1 class="text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">{{ t('welcome.title') }}</h1>
-        <p class="text-neutral-500 dark:text-neutral-400 mt-2">{{ t('welcome.subtitle') }}</p>
+        <p class="text-neutral-500 dark:text-neutral-400 mt-4 whitespace-pre-line">{{ t('welcome.subtitle') }}</p>
       </div>
 
       <div class="space-y-6">

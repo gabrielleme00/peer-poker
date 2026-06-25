@@ -3,8 +3,8 @@ import { createI18n } from 'vue-i18n';
 const messages = {
   en: {
     welcome: {
-      title: 'Peer Poker',
-      subtitle: 'Peer-to-peer planning poker.',
+      title: 'SyncPoker',
+      subtitle: 'A minimalist planning poker tool that stays out of your way.',
       yourName: 'Your Name',
       enterName: 'Enter your name',
       createRoom: 'Create Room',
@@ -103,8 +103,8 @@ const messages = {
   },
   pt: {
     welcome: {
-      title: 'Peer Poker',
-      subtitle: 'Planning poker ponto-a-ponto.',
+      title: 'SyncPoker',
+      subtitle: 'Uma ferramenta minimalista de planejamento poker que não atrapalha seu fluxo.',
       yourName: 'Seu Nome',
       enterName: 'Digite seu nome',
       createRoom: 'Criar Sala',

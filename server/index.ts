@@ -368,5 +368,5 @@ wsServer.on('connection', (ws) => {
 });
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`[peer-poker] WebSocket server listening on port ${PORT}`);
+  console.log(`[SyncPoker] WebSocket server listening on port ${PORT}`);
 });
