@@ -130,6 +130,7 @@ const { t } = useI18n();
           v-for="task in state.tasks" 
           :key="task.id"
           @click="emit('setActiveTask', task.id)"
+          :title="task.title"
           class="p-3 rounded-xl border transition-all cursor-pointer group relative"
           :class="state.activeTaskId === task.id 
             ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20' 

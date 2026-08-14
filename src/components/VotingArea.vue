@@ -174,14 +174,14 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
             <div class="mb-12">
               <div class="flex items-center justify-between mb-8">
                 <h3 class="text-sm font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.2em]">{{ t('room.results') }}</h3>
-                <div v-if="isManager" class="flex items-center space-x-2">
+                <div v-if="isManager" class="flex flex-col gap-2 items-center space-x-2">
                   <span class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mr-2">{{ t('room.setFinal') }}:</span>
-                  <div class="flex flex-wrap gap-1 justify-center max-w-xs">
+                  <div class="flex flex-wrap gap-2 justify-center max-w-sm">
                     <button 
                       v-for="score in voteOptions.filter(o => o !== '?')" 
                       :key="score"
                       @click="emit('setFinalScore', score)"
-                      class="px-3 py-1 border hover:border-blue-500 dark:hover:border-blue-500 text-neutral-700 dark:text-neutral-300 text-xs font-bold rounded-lg transition-all"
+                      class="px-5 py-3 border-2 hover:border-blue-500 dark:hover:border-blue-500 text-neutral-700 dark:text-neutral-300 text-base font-bold rounded-xl transition-all active:scale-95"
                       :class="activeTask?.finalScore === score ? 'bg-blue-100 dark:bg-blue-900 border-blue-600' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800'"
                     >
                       {{ score }}
