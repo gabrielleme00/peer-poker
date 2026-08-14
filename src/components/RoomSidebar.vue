@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, onBeforeUnmount } from 'vue';
 import { Users, UserPlus, ShieldCheck, Trash2, Plus, PackagePlus, Pencil, FileText, CheckCircle2, RotateCcw, LogOut, X } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { RoomState } from '../types';
@@ -23,6 +24,40 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+// Desktop-only horizontal resize
+const MIN_WIDTH = 260;
+const MAX_WIDTH = 520;
+const STORAGE_KEY = 'peer-poker-sidebar-width';
+const sidebarWidth = ref(Number(localStorage.getItem(STORAGE_KEY)) || 320);
+const isResizing = ref(false);
+
+const startResize = (e: MouseEvent) => {
+  isResizing.value = true;
+  e.preventDefault();
+  document.body.classList.add('select-none');
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', stopResize);
+};
+
+const onResize = (e: MouseEvent) => {
+  if (!isResizing.value) return;
+  sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX));
+};
+
+const stopResize = () => {
+  if (!isResizing.value) return;
+  isResizing.value = false;
+  document.body.classList.remove('select-none');
+  localStorage.setItem(STORAGE_KEY, String(sidebarWidth.value));
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+};
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+});
 </script>
 
 <template>
@@ -34,9 +69,15 @@ const { t } = useI18n();
   />
 
   <aside 
-    class="fixed inset-y-0 left-0 w-72 md:w-80 bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 z-40 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 flex flex-col"
+    class="fixed inset-y-0 left-0 w-72 md:w-80 lg:w-[var(--sidebar-width)] bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 z-40 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 flex flex-col"
     :class="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'"
+    :style="`--sidebar-width: ${sidebarWidth}px`"
   >
+    <div
+      class="hidden lg:block absolute inset-y-0 right-0 w-1.5 -mr-0.5 cursor-col-resize z-50 hover:bg-blue-500/40 transition-colors"
+      :class="isResizing ? 'bg-blue-500/40' : ''"
+      @mousedown="startResize"
+    ></div>
     <!-- Participants Section -->
     <div class="p-4 md:p-6 border-b border-neutral-100 dark:border-neutral-800 shrink-0">
       <div class="flex items-center justify-between mb-4">
