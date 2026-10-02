@@ -60,6 +60,11 @@ const defaultSettings = (): RoomSettings => ({
 // ─── Message handlers ─────────────────────────────────────────────────────────
 
 const handleCreateRoom = (socketId: string, ws: WebSocket, msg: Extract<ClientMessage, { type: 'CREATE_ROOM' }>) => {
+  if (clientRooms.has(socketId)) {
+    send(ws, { type: 'ERROR', message: 'Already in a room.' });
+    return;
+  }
+
   const roomId = generateId(6);
   const userId = generateId(10);
 
@@ -97,6 +102,11 @@ const handleCreateRoom = (socketId: string, ws: WebSocket, msg: Extract<ClientMe
 };
 
 const handleJoin = (socketId: string, ws: WebSocket, msg: Extract<ClientMessage, { type: 'JOIN' }>) => {
+  if (clientRooms.has(socketId)) {
+    send(ws, { type: 'ERROR', message: 'Already in a room.' });
+    return;
+  }
+
   const room = rooms.get(msg.roomId);
   if (!room) {
     send(ws, { type: 'ERROR', message: 'Room not found.' });
@@ -275,6 +285,7 @@ const handleKick = (socketId: string, msg: Extract<ClientMessage, { type: 'KICK'
 const handleDisconnect = (socketId: string) => {
   const roomId = clientRooms.get(socketId);
   if (!roomId) return;
+  clientRooms.delete(socketId);
 
   const room = rooms.get(roomId);
   if (!room) return;
@@ -283,7 +294,6 @@ const handleDisconnect = (socketId: string) => {
   if (client) {
     room.state.users = room.state.users.filter(u => u.id !== client.userId);
     room.clients.delete(socketId);
-    clientRooms.delete(socketId);
   }
 
   if (room.clients.size === 0) {
@@ -331,8 +341,28 @@ const PORT = parseInt(process.env.PORT ?? '8080', 10);
 const httpServer = createServer();
 const wsServer = new WebSocketServer({ server: httpServer });
 
+// Half-open sockets (network drop, sleep) never emit 'close'; ping/pong detects them.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const aliveSockets = new WeakSet<WebSocket>();
+
+const heartbeat = setInterval(() => {
+  for (const ws of wsServer.clients) {
+    if (!aliveSockets.has(ws)) {
+      ws.terminate();
+      continue;
+    }
+    aliveSockets.delete(ws);
+    ws.ping();
+  }
+}, HEARTBEAT_INTERVAL_MS);
+
+wsServer.on('close', () => clearInterval(heartbeat));
+
 wsServer.on('connection', (ws) => {
   const socketId = generateId(16);
+
+  aliveSockets.add(ws);
+  ws.on('pong', () => aliveSockets.add(ws));
 
   ws.on('message', (data) => {
     let msg: ClientMessage;
