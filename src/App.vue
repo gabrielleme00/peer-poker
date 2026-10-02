@@ -530,6 +530,7 @@ onUnmounted(() => {
           @revealVotes="revealVotes"
           @resetVoting="resetVoting"
           @setFinalScore="setFinalScore"
+          @openTaskModal="openTaskModal"
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { Play, Eye, RotateCcw, User as UserIcon, Users } from 'lucide-vue-next';
+import { Play, Eye, RotateCcw, User as UserIcon, Users, Plus, PackagePlus, ListTodo } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { RoomState, Task, User } from '../types';
 
@@ -19,6 +19,7 @@ const emit = defineEmits<{
   (e: 'revealVotes'): void;
   (e: 'resetVoting'): void;
   (e: 'setFinalScore', score: string): void;
+  (e: 'openTaskModal', task?: Task, batch?: boolean): void;
 }>();
 
 const { t } = useI18n();
@@ -92,10 +93,22 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
     <div v-if="!activeTask" class="flex-1 flex flex-col items-center justify-center p-12 text-center">
       <div
         class="w-24 h-24 bg-white dark:bg-neutral-900 rounded-3xl shadow-sm border border-neutral-200 dark:border-neutral-800 flex items-center justify-center mb-6">
-        <Play class="w-10 h-10 text-neutral-300 dark:text-neutral-700" />
+        <ListTodo class="w-10 h-10 text-neutral-300 dark:text-neutral-700" />
       </div>
       <h3 class="text-xl font-bold text-neutral-900 dark:text-white mb-2">{{ t('room.noActiveTask') }}</h3>
       <p class="text-neutral-500 dark:text-neutral-400 max-w-xs">{{ t('room.selectTask') }}</p>
+      <div v-if="isManager" class="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <button @click="emit('openTaskModal')"
+          class="flex items-center justify-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98]">
+          <Plus class="w-4 h-4 mr-2" />
+          {{ t('tasks.addTitle') }}
+        </button>
+        <button @click="emit('openTaskModal', undefined, true)"
+          class="flex items-center justify-center px-5 py-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-blue-400 dark:hover:border-blue-500 text-neutral-700 dark:text-neutral-300 font-bold rounded-xl transition-all active:scale-[0.98]">
+          <PackagePlus class="w-4 h-4 mr-2" />
+          {{ t('tasks.batchTitle') }}
+        </button>
+      </div>
     </div>
 
     <div v-else class="flex-1 flex flex-col overflow-hidden">
