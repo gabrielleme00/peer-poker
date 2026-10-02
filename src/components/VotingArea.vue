@@ -27,6 +27,19 @@ const voters = computed(() => props.state.users.filter(u => !u.isManager));
 const voterCount = computed(() => voters.value.length);
 const votedCount = computed(() => voters.value.filter(u => u.hasVoted).length);
 
+// Ties keep card order from voteOptions
+const voteSummary = computed(() => {
+  const counts = new Map<string, number>();
+  for (const u of voters.value) {
+    if (u.vote) counts.set(u.vote, (counts.get(u.vote) ?? 0) + 1);
+  }
+  const total = [...counts.values()].reduce((sum, c) => sum + c, 0);
+  const max = Math.max(0, ...counts.values());
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || props.voteOptions.indexOf(a[0]) - props.voteOptions.indexOf(b[0]))
+    .map(([vote, count]) => ({ vote, count, percent: Math.round((count / total) * 100), isTop: count === max }));
+});
+
 // Optimistic card highlight — reflects selection immediately before server roundtrip
 const localVote = ref<string | null>(null);
 
@@ -87,13 +100,13 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
 
     <div v-else class="flex-1 flex flex-col overflow-hidden">
       <!-- Task Detail Area -->
-      <div class="p-4 md:p-8 shrink-0">
+      <div class="p-3 md:p-4 shrink-0">
         <div class="max-w-4xl mx-auto">
           <div
-            class="bg-white dark:bg-neutral-900 rounded-3xl p-6 md:p-8 shadow-sm border border-neutral-200 dark:border-neutral-800">
-            <div class="flex flex-col md:flex-row md:items-start justify-between gap-6">
+            class="bg-white dark:bg-neutral-900 rounded-2xl p-4 md:p-5 shadow-sm border border-neutral-200 dark:border-neutral-800">
+            <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
               <div class="flex-1">
-                <div class="flex items-center space-x-2 mb-3">
+                <div class="flex items-center space-x-2 mb-2">
                   <span
                     class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-md">
                     {{ t('room.activeTask') }}
@@ -103,15 +116,15 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
                     {{ t('room.completed') }}
                   </span>
                 </div>
-                <h1 class="text-2xl md:text-3xl font-black text-neutral-900 dark:text-white mb-4 leading-tight">{{
+                <h1 class="text-xl md:text-2xl font-black text-neutral-900 dark:text-white mb-1 leading-tight">{{
                   activeTask.title }}</h1>
-                <p class="text-neutral-500 dark:text-neutral-400 leading-relaxed">{{ activeTask.description ||
+                <p class="text-sm text-neutral-500 dark:text-neutral-400 leading-snug">{{ activeTask.description ||
                   t('room.noDescription') }}</p>
               </div>
 
-              <div v-if="isManager" class="flex flex-col space-y-3 shrink-0">
+              <div v-if="isManager" class="flex flex-col space-y-2 shrink-0">
                 <button v-if="!state.isVotingStarted && !state.isRevealed" @click="emit('startVoting')"
-                  class="flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98]">
+                  class="flex items-center justify-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98]">
                   <Play class="w-4 h-4 mr-2" />
                   {{ t('room.startVoting') }}
                 </button>
@@ -125,7 +138,7 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
                       :style="{ width: `${votingProgress}%` }"></div>
                   </div>
                   <button @click="emit('revealVotes')"
-                    class="mt-2 flex items-center justify-center px-6 py-3 font-bold rounded-2xl shadow-lg transition-all active:scale-[0.98]"
+                    class="mt-1 flex items-center justify-center px-5 py-2.5 font-bold rounded-xl shadow-lg transition-all active:scale-[0.98]"
                     :class="votingProgress === 100
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/30 ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-neutral-900 animate-pulse'
                       : 'bg-neutral-900 dark:bg-neutral-800 hover:bg-neutral-800 dark:hover:bg-neutral-700 text-white'">
@@ -134,7 +147,7 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
                   </button>
                 </div>
                 <button v-if="state.isRevealed" @click="emit('resetVoting')"
-                  class="flex items-center justify-center px-6 py-3 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-bold rounded-2xl transition-all active:scale-[0.98]">
+                  class="flex items-center justify-center px-5 py-2.5 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-bold rounded-xl transition-all active:scale-[0.98]">
                   <RotateCcw class="w-4 h-4 mr-2" />
                   {{ t('room.reset') }}
                 </button>
@@ -145,7 +158,7 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
       </div>
 
       <!-- Voting / Results Area -->
-      <div class="flex-1 overflow-y-auto p-4 md:p-8 pt-0 custom-scrollbar">
+      <div class="flex-1 overflow-y-auto p-3 md:p-4 pt-0 custom-scrollbar">
         <div class="max-w-4xl mx-auto">
           <!-- Voting Interface -->
           <div v-if="state.isVotingStarted && !currentUser?.isManager"
@@ -153,11 +166,11 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
             <h3
               class="text-sm font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.2em] mb-2 text-center">
               {{ t('room.castVote') }}</h3>
-            <p class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-6 text-center">
+            <p class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-4 text-center">
               {{ t('room.progress') }}:
               <span class="text-blue-600 dark:text-blue-400">{{ votedCount }}/{{ voterCount }} · {{ votingProgress }}%</span>
             </p>
-            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
               <button v-for="option in voteOptions" :key="option" @click="handleCastVote(option)"
                 class="aspect-[3/4] rounded-2xl border-2 flex flex-col items-center justify-center transition-all group relative overflow-hidden"
                 :class="localVote === option
@@ -171,47 +184,74 @@ watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([new
 
           <!-- Waiting State -->
           <div v-else-if="state.isVotingStarted && currentUser?.isManager"
-            class="flex flex-col items-center justify-center py-12 animate-in fade-in duration-500">
-            <div class="relative mb-8">
-              <div class="w-20 h-20 border-4 border-blue-100 dark:border-blue-900/30 rounded-full"></div>
+            class="flex flex-col items-center justify-center py-6 animate-in fade-in duration-500">
+            <div class="relative mb-4">
+              <div class="w-16 h-16 border-4 border-blue-100 dark:border-blue-900/30 rounded-full"></div>
               <div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin">
               </div>
-              <Users class="absolute inset-0 m-auto w-8 h-8 text-blue-600" />
+              <Users class="absolute inset-0 m-auto w-6 h-6 text-blue-600" />
             </div>
-            <h3 class="text-xl font-bold text-neutral-900 dark:text-white mb-2">{{ t('room.waitingVotes') }}</h3>
+            <h3 class="text-lg font-bold text-neutral-900 dark:text-white mb-1">{{ t('room.waitingVotes') }}</h3>
             <p class="text-neutral-500 dark:text-neutral-400">{{ t('room.waitingDesc') }}</p>
           </div>
 
           <!-- Results Display -->
           <div v-else-if="state.isRevealed" class="animate-in fade-in zoom-in-95 duration-500">
-            <div class="mb-12">
-              <div class="flex items-center justify-between mb-8">
+            <div class="mb-4">
+              <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.2em]">{{
                   t('room.results') }}</h3>
-                <div v-if="isManager" class="flex flex-col gap-2 items-center space-x-2">
-                  <span class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mr-2">{{ t('room.setFinal')
-                    }}:</span>
-                  <div class="flex flex-wrap gap-2 justify-center max-w-sm">
-                    <button v-for="score in voteOptions" :key="score"
-                      @click="emit('setFinalScore', score)"
-                      class="px-5 py-3 border-2 hover:border-blue-500 dark:hover:border-blue-500 text-neutral-700 dark:text-neutral-300 text-base font-bold rounded-xl transition-all active:scale-95"
-                      :class="activeTask?.finalScore === score ? 'bg-blue-100 dark:bg-blue-900 border-blue-600' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800'">
-                      {{ score }}
-                    </button>
-                  </div>
-                </div>
               </div>
 
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+              <!-- Final score selection -->
+              <div v-if="isManager" class="mb-3 flex flex-wrap items-center gap-2">
+                <span class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mr-1">{{ t('room.setFinal')
+                  }}:</span>
+                <button v-for="score in voteOptions" :key="score"
+                  @click="emit('setFinalScore', score)"
+                  class="px-4 py-2 border-2 hover:border-blue-500 dark:hover:border-blue-500 text-neutral-700 dark:text-neutral-300 text-base font-bold rounded-xl transition-all active:scale-95"
+                  :class="activeTask?.finalScore === score ? 'bg-blue-100 dark:bg-blue-900 border-blue-600' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800'">
+                  {{ score }}
+                </button>
+              </div>
+
+              <!-- Vote Summary -->
+              <div class="mb-4 bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-neutral-200 dark:border-neutral-800 shadow-sm">
+                <h4 class="text-xs font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.2em] mb-3">
+                  {{ t('room.voteSummary') }}</h4>
+                <p v-if="voteSummary.length === 0" class="text-sm text-neutral-400 dark:text-neutral-500">
+                  {{ t('room.noVotesCast') }}</p>
+                <ul v-else class="space-y-2">
+                  <li v-for="item in voteSummary" :key="item.vote" class="flex items-center gap-3">
+                    <div class="w-10 h-10 shrink-0 rounded-lg border-2 flex items-center justify-center text-lg font-black tracking-tighter"
+                      :class="item.isTop
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20'
+                        : 'bg-neutral-50 dark:bg-neutral-800/50 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300'">
+                      {{ item.vote }}
+                    </div>
+                    <div class="flex-1 h-3 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full transition-all duration-700"
+                        :class="item.isTop ? 'bg-blue-600' : 'bg-blue-300 dark:bg-blue-900'"
+                        :style="{ width: `${item.percent}%` }"></div>
+                    </div>
+                    <div class="w-20 shrink-0 text-right text-sm font-bold text-neutral-900 dark:text-white">
+                      {{ item.count }}×
+                      <span class="text-xs font-medium text-neutral-400 dark:text-neutral-500">{{ item.percent }}%</span>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                 <div v-for="user in state.users.filter(u => !u.isManager)" :key="user.id"
-                  class="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col items-center text-center transition-all hover:shadow-md hover:-translate-y-1">
+                  class="bg-white dark:bg-neutral-900 p-3 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col items-center text-center transition-all hover:shadow-md hover:-translate-y-0.5">
                   <div
-                    class="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400 dark:text-neutral-500 mb-4">
-                    <UserIcon class="w-6 h-6" />
+                    class="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400 dark:text-neutral-500 mb-2">
+                    <UserIcon class="w-4 h-4" />
                   </div>
-                  <p class="text-sm font-bold text-neutral-900 dark:text-white truncate w-full mb-4">{{ user.name }}</p>
+                  <p class="text-sm font-bold text-neutral-900 dark:text-white truncate w-full mb-2">{{ user.name }}</p>
                   <div
-                    class="w-16 h-20 rounded-xl border-2 flex items-center justify-center text-2xl font-black tracking-tighter"
+                    class="w-12 h-14 rounded-lg border-2 flex items-center justify-center text-xl font-black tracking-tighter"
                     :class="user.hasVoted ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' : 'bg-neutral-50 dark:bg-neutral-800/50 border-neutral-100 dark:border-neutral-700 text-neutral-300 dark:text-neutral-600'">
                     {{ user.vote || '?' }}
                   </div>
