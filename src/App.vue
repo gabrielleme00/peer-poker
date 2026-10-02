@@ -177,6 +177,7 @@ const handleServerMessage = (event: MessageEvent) => {
       myId.value = msg.userId;
       isManager.value = false;
       Object.assign(state, msg.state);
+      window.history.replaceState({}, '', `?room=${encodeURIComponent(roomId.value)}`);
       isJoined.value = true;
       isConnecting.value = false;
       break;
