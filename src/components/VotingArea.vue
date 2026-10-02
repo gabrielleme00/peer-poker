@@ -48,13 +48,15 @@ type Particle = { tx: number; ty: number; color: string; delay: number; size: nu
 const showCelebration = ref(false);
 const celebrationScore = ref('');
 const celebrationParticles = ref<Particle[]>([]);
+let celebrationTimer: ReturnType<typeof setTimeout> | undefined;
 
-watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
-  if (newVal && newVal !== oldVal) {
+// Tracking the task id too so switching to an already-scored task doesn't count as a new score
+watch(() => [props.activeTask?.id, props.activeTask?.finalScore] as const, ([newId, newVal], [oldId, oldVal]) => {
+  if (newId === oldId && newVal && newVal !== oldVal) {
     const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
     celebrationParticles.value = Array.from({ length: 28 }, (_, i) => {
       const angle = (i / 28) * 360 + (Math.random() * 26 - 13);
-      const distance = 100 + Math.random() * 160;
+      const distance = 50 + Math.random() * 90;
       return {
         tx: Math.cos((angle * Math.PI) / 180) * distance,
         ty: Math.sin((angle * Math.PI) / 180) * distance,
@@ -66,7 +68,8 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
     });
     celebrationScore.value = newVal;
     showCelebration.value = true;
-    setTimeout(() => { showCelebration.value = false; }, 4000);
+    clearTimeout(celebrationTimer);
+    celebrationTimer = setTimeout(() => { showCelebration.value = false; }, 2500);
   }
 });
 </script>
@@ -223,45 +226,39 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
 
   <Teleport to="body">
     <Transition name="celebration">
-      <div v-if="showCelebration" class="fixed inset-0 z-[9999] flex items-center justify-center cursor-pointer"
-        @click="showCelebration = false">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
-
-        <div class="relative celebration-card">
-          <!-- Confetti particles -->
-          <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div v-for="(p, i) in celebrationParticles" :key="i" class="absolute celebration-particle" :style="{
-              width: `${p.size}px`,
-              height: `${p.size}px`,
-              backgroundColor: p.color,
-              borderRadius: p.square ? '3px' : '50%',
-              '--tx': `${p.tx}px`,
-              '--ty': `${p.ty}px`,
-              animationDelay: `${p.delay}s`,
-            }"></div>
-          </div>
-
-          <!-- Expanding ring pulses -->
-          <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="celebration-ring"></div>
-            <div class="celebration-ring" style="animation-delay: 0.35s"></div>
-          </div>
-
-          <!-- Score card -->
-          <div
-            class="relative celebration-inner bg-white dark:bg-neutral-900 rounded-[2rem] px-14 py-10 text-center shadow-2xl border border-white/20">
-            <div class="text-[10px] font-black uppercase tracking-[0.4em] text-blue-400 mb-3">{{ t('room.finalScore') }}
+      <div v-if="showCelebration"
+        class="fixed top-4 inset-x-0 z-[9999] flex justify-center px-4 pointer-events-none">
+        <div
+          class="celebration-inner pointer-events-auto cursor-pointer flex items-center gap-5 bg-white dark:bg-neutral-900 rounded-2xl pl-6 pr-7 py-3 shadow-2xl border border-neutral-200 dark:border-neutral-800"
+          :title="t('room.tapToDismiss')" @click="showCelebration = false">
+          <!-- Score with burst effects -->
+          <div class="relative flex items-center justify-center min-w-[3.5rem]">
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div v-for="(p, i) in celebrationParticles" :key="i" class="absolute celebration-particle" :style="{
+                width: `${p.size}px`,
+                height: `${p.size}px`,
+                backgroundColor: p.color,
+                borderRadius: p.square ? '3px' : '50%',
+                '--tx': `${p.tx}px`,
+                '--ty': `${p.ty}px`,
+                animationDelay: `${p.delay}s`,
+              }"></div>
+              <div class="celebration-ring"></div>
+              <div class="celebration-ring" style="animation-delay: 0.35s"></div>
             </div>
             <div
-              class="celebration-number text-[6rem] font-black leading-none bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent select-none">
+              class="relative celebration-number text-5xl font-black leading-none bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent select-none">
               {{ celebrationScore }}
             </div>
-            <div class="flex justify-center gap-2 mt-5">
-              <span v-for="icon in 5" :key="icon" class="text-xl celebration-icon"
-                :style="{ animationDelay: `${0.6 + icon * 0.08}s` }">✔️</span>
+          </div>
+
+          <div>
+            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400 mb-1.5">{{ t('room.finalScore') }}
             </div>
-            <p class="mt-5 text-[10px] text-neutral-400 dark:text-neutral-600 font-medium tracking-widest uppercase">{{
-              t('room.tapToDismiss') }}</p>
+            <div class="flex gap-1.5">
+              <span v-for="icon in 5" :key="icon" class="text-sm celebration-icon"
+                :style="{ animationDelay: `${0.3 + icon * 0.08}s` }">✔️</span>
+            </div>
           </div>
         </div>
       </div>
@@ -270,26 +267,6 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
 </template>
 
 <style scoped>
-@keyframes bounce-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.2) rotate(-8deg);
-  }
-
-  55% {
-    opacity: 1;
-    transform: scale(1.1) rotate(3deg);
-  }
-
-  75% {
-    transform: scale(0.96) rotate(-1deg);
-  }
-
-  100% {
-    transform: scale(1) rotate(0deg);
-  }
-}
-
 @keyframes particle-burst {
   0% {
     transform: translate(0, 0) scale(1);
@@ -342,7 +319,7 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
   }
 
   100% {
-    transform: scale(4);
+    transform: scale(3);
     opacity: 0;
   }
 }
@@ -351,16 +328,12 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
 
   0%,
   100% {
-    box-shadow: 0 0 40px rgba(59, 130, 246, 0.2), 0 25px 60px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2), 0 10px 30px rgba(0, 0, 0, 0.2);
   }
 
   50% {
-    box-shadow: 0 0 80px rgba(139, 92, 246, 0.35), 0 25px 60px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.35), 0 10px 30px rgba(0, 0, 0, 0.2);
   }
-}
-
-.celebration-card {
-  animation: bounce-in 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .celebration-inner {
@@ -382,23 +355,24 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
 
 .celebration-ring {
   position: absolute;
-  width: 160px;
-  height: 160px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: 3px solid rgba(139, 92, 246, 0.45);
   animation: ring-expand 1.6s ease-out 0.2s both;
 }
 
 .celebration-enter-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .celebration-leave-active {
-  transition: opacity 0.5s ease;
+  transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
 .celebration-enter-from,
 .celebration-leave-to {
   opacity: 0;
+  transform: translateY(-1.5rem);
 }
 </style>
