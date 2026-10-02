@@ -576,6 +576,10 @@ body {
   font-family: var(--font-sans);
 }
 
+button:hover {
+  cursor: pointer;
+}
+
 .animate-in {
   animation-duration: 0.3s;
   animation-fill-mode: both;
