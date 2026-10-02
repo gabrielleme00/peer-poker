@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { Play, Eye, RotateCcw, User as UserIcon, Users } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { RoomState, Task, User } from '../types';
@@ -22,6 +22,10 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+const voters = computed(() => props.state.users.filter(u => !u.isManager));
+const voterCount = computed(() => voters.value.length);
+const votedCount = computed(() => voters.value.filter(u => u.hasVoted).length);
 
 // Optimistic card highlight — reflects selection immediately before server roundtrip
 const localVote = ref<string | null>(null);
@@ -111,7 +115,7 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
                 <div v-if="state.isVotingStarted" class="flex flex-col space-y-2">
                   <div class="flex items-center justify-between text-xs font-bold mb-1">
                     <span class="text-neutral-500 dark:text-neutral-400">{{ t('room.progress') }}</span>
-                    <span class="text-blue-600 dark:text-blue-400">{{ votingProgress }}%</span>
+                    <span class="text-blue-600 dark:text-blue-400">{{ votedCount }}/{{ voterCount }} · {{ votingProgress }}%</span>
                   </div>
                   <div class="w-full h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
                     <div class="h-full bg-blue-600 transition-all duration-500"
@@ -144,8 +148,12 @@ watch(() => props.activeTask?.finalScore, (newVal, oldVal) => {
           <div v-if="state.isVotingStarted && !currentUser?.isManager"
             class="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3
-              class="text-sm font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.2em] mb-6 text-center">
+              class="text-sm font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-[0.2em] mb-2 text-center">
               {{ t('room.castVote') }}</h3>
+            <p class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-6 text-center">
+              {{ t('room.progress') }}:
+              <span class="text-blue-600 dark:text-blue-400">{{ votedCount }}/{{ voterCount }} · {{ votingProgress }}%</span>
+            </p>
             <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
               <button v-for="option in voteOptions" :key="option" @click="handleCastVote(option)"
                 class="aspect-[3/4] rounded-2xl border-2 flex flex-col items-center justify-center transition-all group relative overflow-hidden"
