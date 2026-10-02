@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
-      <div class="space-y-1 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+      <div class="space-y-1 max-h-48 overflow-y-auto -mr-4 pr-4 md:-mr-6 md:pr-6 custom-scrollbar">
         <div 
           v-for="user in state.users" 
           :key="user.id"
